@@ -23,14 +23,14 @@ class TaskAPI(MethodView):
         
 
     def save_tasks(self,tasks):
-        with open("tasks.json", "r") as file:
+        with open("tasks.json", "w") as file:
             json.dump(tasks, file, indent=4)
 
 
     def find_task_by_id(self, tasks, task_id):
         for task in tasks:
             if task.get("id") == task_id:
-                return
+                return task
         return None
     
     def validate_task_data(self,data):
@@ -65,7 +65,7 @@ class TaskAPI(MethodView):
             filtered_tasks = []
             for task in tasks:
                 if task.get("state", "").lower () == filter_state.lower():
-                    filtered_tasks.append(tasks)
+                    filtered_tasks.append(task)
 
 
             return jsonify({
@@ -122,9 +122,15 @@ class TaskAPI(MethodView):
 
     def put(self,task_id):
         update_data= request.get_json()
-
         if not update_data:
             return jsonify({"error": "Not have any data to update"}),400
+        
+
+        if "id" in update_data:
+            return jsonify({"error":"Cannot modify the task ID"}),400
+        
+        if "state" in update_data and update_data["state"] not in valid_states:
+            return jsonify({"error":f"Invalid state.Allowed states: {valid_states}"}),400
         
 
         tasks= self.load_tasks()
@@ -161,9 +167,7 @@ class TaskAPI(MethodView):
         })
     
 task_view = TaskAPI.as_view("task_api")
-
 app.add_url_rule("/tasks", view_func=task_view, methods =["GET", "POST"])
-
 app.add_url_rule("/tasks/<int:task_id>", view_func=task_view,methods=["GET","PUT","DELETE"])
 
 if __name__ == "__main__":
