@@ -2,10 +2,40 @@ from flask import Flask, request,jsonify
 import json
 
 
+app=Flask(__name__)
 
 valid_states= ["To do", "In progress...", "Completed!!"]
+tasks_file ="tasks.json"
 
-app=Flask(__name__)
+def load_tasks():
+    try:
+        with open(tasks_file,"r")as file:
+            return json.load(file)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return[]
+    
+
+def save_tasks(tasks):
+    with open(tasks_file, "w") as file :
+        json.dump(tasks,file,indent=4)
+
+
+def is_valid_task_data(data, check_id=True):
+    required = ["title", "description", "state"]
+    if check_id:
+        required.insert(0,"id")
+
+
+    for field in required:
+        if not data.get(field):
+            return False, f"Missing or empty field: {field}"
+        
+
+    if data["state"] not in valid_states:
+        return False, f"Invalid state.Allowed:{valid_states}"
+    
+
+    return True, None
 
 @app.route("/")
 def init():
@@ -13,27 +43,22 @@ def init():
 
 
 
-@app.route("/tasks")
+@app.route("/tasks", methods= ["GET"])
 def get_task():
-    try:
-        with open("tasks.json", "r") as file:
-            tasks = json.load(file)
-        filter_state= request.args.get("state")
-        if filter_state:
-            filters_tasks = []
-            for task in tasks:
-                if task.get("state", " ").lower()==filter_state.lower():
-                    filters_tasks.append(task)
+    tasks = load_tasks()
+    filter_state= request.args.get("state")
 
 
+    if filter_state:
+            filtered=[t for t in tasks if t.get("state", "").lower()== filter_state.lower()]
             return jsonify({
                 "message": f"Filters tasks from state:{filter_state}",
-                "tasks": filters_tasks,
-                "total": len(filters_tasks)
+                "tasks": filtered,
+                "total": len(filtered)
             })
         
 
-        return jsonify({
+    return jsonify({
             "message":"All tasks get successfully",
             "tasks": tasks,
             "total":len(tasks)
@@ -41,138 +66,75 @@ def get_task():
         })
     
 
-    except FileNotFoundError:
-        return jsonify({
-            "message": "Not find the task file",
-            "tasks": [],
-            "total":0
-        }),400
-    
-
 
 @app.route("/tasks", methods= ["POST"])
 def create_task():
-    new_task_data=request.get_json()
-    if not new_task_data:
-        return jsonify({'error': 'Not file JSON received'}), 400
+    data=request.get_json()
+    if not data:
+        return jsonify({'error': 'Not data JSON received'}), 400
             
 
-    task_id= new_task_data.get("id")
-    title= new_task_data.get("title")
-    description=new_task_data.get("description")
-    state= new_task_data.get("state")
+    is_valid, error_msg = is_valid_task_data(data)
+    if not is_valid:
+        return jsonify({"error": error_msg}), 400
+    
+    tasks= load_tasks()
+    if any(t["id"] == data["id"] for t in tasks):
+        return jsonify({"error": f"Task with id {data['id']} already exists"}), 409
 
-
-    if not task_id or not title or not description or not state:
-        return jsonify({"error": "Check the last information, some data is missing"})
+    tasks.append(data)
+    save_tasks(tasks)
     
 
     
-    if state not in valid_states:
-        return jsonify({"error": f"The state{state} is not valid. Allowed values: {valid_states}"}),400
     
-
-    try:
-        with open ("tasks.json", "r") as file:
-            tasks=json.load(file)
-    except (FileNotFoundError, json.JSONDecodeError):
-        tasks=[]
-
-    for task_item in tasks:
-        if task_item.get ("id")== task_id:
-            return jsonify({"error": f"Is all ready task exist with this id '{task_id}'."}),409
-        
-
-    new_task={
-        "id": task_id,
-        "title": title,
-        "description": description,
-        "state": state
-    }
-
-
-    tasks.append(new_task)
-
-
-    with open ("tasks.json", "w") as file:
-        json.dump(tasks,file, indent=4)
-
 
 
     return jsonify({
         "message": "Task created successfully",
-        "task": new_task
+        "task": data
     }),201
 
 
 @app.route("/tasks/<int:task_id>", methods= ["PUT"])
 def update_task(task_id):
-    update_data= request.get_json()
-    if not update_data:
+    data= request.get_json()
+    if not data:
         return jsonify({"Error": "Not have any data to update. "}),400
-    if "state" in update_data:
-        valid_states= ["To do", "In progress...", "Completed!!"]
-        if update_data["state"] not in valid_states:
-            return jsonify({"error":f"The state '{update_data['state']}' is not valid"}),400
-
-
-    try:
-        with open("tasks.json", "r") as file:
-            tasks = json.load(file)
-    except(FileNotFoundError, json.JSONDecodeError):
-            return jsonify({"error": "Not found tasks"}),404
     
 
-    task_to_update= None
-    for task in tasks:
-            if task.get("id") == task_id:
-                task_to_update= task
-                break
-
-
-    if not task_to_update:
-            return jsonify({"error": f"task with id {task_id} not found"}),404
-
-
-    task_to_update.update(update_data)
-
-
+    if "state" in data and data ["state"] not in valid_states:
+        return jsonify({"error": f"Invalid state: {data['state']}. Allowed: {valid_states}"}), 400
     
-    with open ("tasks.json","w") as file:
-        json.dump(tasks, file, indent=4)
+
+    tasks = load_tasks()
+    task = next((t for t in tasks if t["id"] == task_id), None)
+
+    if not task:
+        return jsonify({"error": f"Task with id {task_id} not found"}), 404
+    
+
+    task.update(data)
+    save_tasks(tasks)
 
 
     return jsonify({
         "message": "Task update successfully",
-        "task": task_to_update
+        "task": task
     })
 
 
 @app.route("/tasks/<int:task_id>", methods=["DELETE"])
 def delete_task(task_id):
-    try:
-        with open("tasks.json","r") as file:
-            tasks=json.load(file)
-    except(FileNotFoundError, json.JSONDecodeError):
-        return jsonify({"error":"Task file not found"}), 404
-    
-
-    task_to_delete=None
-    for task in tasks:
-        if task.get("id") == task_id:
-            task_to_delete = task
-            break
+    tasks= load_tasks()
+    task= next ((t for t in tasks if t["id"]== task_id), None)
 
 
-    if not task_to_delete:
+    if not task:
         return jsonify({"error":f"The task with {task_id} was no found"}),404
     
-    tasks.remove(task_to_delete)
-
-
-
-    with open ("tasks.json", "w") as file:
-        json.dump(tasks, file, indent=4)
+    tasks.remove(task)
+    save_tasks(tasks)
 
 
     return jsonify({"message": f"Tasks with the id {task_id} has been deleted successfully. "})
@@ -181,10 +143,6 @@ def delete_task(task_id):
 
 
 if __name__ == "__main__":
-    print("Initializing the API´s tasks....")
-    print("Available Endpoints")
-    print("GET/TASKS...")
-    print("GET/tasks?estate=<state_name>")
     app.run(debug=True)
     
 
