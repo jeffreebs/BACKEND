@@ -1,11 +1,4 @@
--- ============================================
--- SCRIPT COMPLETO PARA RECREAR EL AMBIENTE
--- Semana 3 - Módulo 2
--- ============================================
 
--- ============================================
--- EJERCICIO PRINCIPAL (week3.db)
--- ============================================
 
 -- Crear tabla productos
 CREATE TABLE products (
@@ -138,7 +131,7 @@ INSERT INTO invoices VALUES(5,'Eve',155000,'2025-08-20 21:44:39','8888-0000','B0
 -- CONSULTAS DE LOS EJERCICIOS
 -- ============================================
 
--- CONSULTAS EJERCICIO PRINCIPAL (reques.2.sql)
+
 -- Ver todos los productos
 SELECT * FROM products;
 
@@ -164,8 +157,7 @@ SELECT * FROM bills ORDER BY amount DESC;
 -- Ver factura específica
 SELECT * FROM bills WHERE invoice_number = "F001";
 
--- CONSULTAS EJERCICIO EXTRA (extraexersecise.2.sql)
--- Ver información de tabla invoices
+
 PRAGMA table_info(invoices);
 
 -- Ver facturas sin teléfono
